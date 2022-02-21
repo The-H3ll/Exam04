@@ -1,0 +1,3 @@
+/Users/molabhai/Desktop/Exam04/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/Users/molabhai/Desktop/Exam04/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/molabhai/Desktop/Exam04/cmake-build-debug/CMakeFiles/Exam04.dir

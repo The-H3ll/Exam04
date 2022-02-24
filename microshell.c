@@ -21,13 +21,26 @@ typedef struct microshell
 	
 }				t_microshell;
 
-t_microshell	init_str(t_microshell micro)
+t_microshell	init_str(void)
 {
+	t_microshell micro;
+
 	micro.cmd = NULL;
 	micro.arg = NULL;
 	micro.meta = NULL;
 	return micro;
 }
+
+t_microshell	*init_ptr(t_microshell *micro)
+{
+
+	micro->cmd = NULL;
+	micro->arg = NULL;
+	micro->meta = NULL;
+	return micro;
+}
+
+
 
 int arg_count(char **av, int index)
 {
@@ -41,17 +54,16 @@ int arg_count(char **av, int index)
 	return (count);
 }
 
-t_microshell	*filling_struct(int ac, char **av, t_microshell *micro)
+t_microshell	*filling_struct(char **av, t_microshell *micro)
 {
-	int i = 0 ;
+	int i = 1 ;
 	int check = 0;
 	int count = 0;
 	int j = 0;
 
 	while (av[i])
 	{
-		i++;
-		while (strcmp(av[i],";") != 0 && strcmp(av[i], "|") != 0)
+		while (av[i] && strcmp(av[i],";") != 0 && strcmp(av[i], "|") != 0)
 		{
 			if (check == 0)
 			{
@@ -70,20 +82,23 @@ t_microshell	*filling_struct(int ac, char **av, t_microshell *micro)
 				micro->arg[j] = strdup(av[i]);
 				j += 1;
 			} 
-			i += 1;
-			if (av[i] == NULL)
-			{
-				micro->meta = NULL;
-				break ;
-			}
-		}
-		if (micro->arg != NULL)
 			micro->arg[j] = NULL;
+			i += 1;
+
+
+		}
 		if (av[i] != NULL)
-		{
 			micro->meta = strdup(av[i]);
+		while (av[i] && strcmp(av[i], ";") == 0)
+			i++;
+		while (av[i] && strcmp(av[i], "|") == 0)
+			i++;
+		if (av[i])
+		{
+			
 			micro->next = malloc(sizeof(t_microshell));
 			micro = micro->next;
+			micro = init_ptr(micro);
 		}
 		check = 0;
 		j = 0;
@@ -96,15 +111,15 @@ void	execute(t_microshell *micro, char **env)
 {
 	pid_t pid;
 
+	if (micro->cmd == NULL)
+		return ;
 	pid = fork();
 	if (pid == 0)
 	{
-		fprintf(stderr, "In execute ==> %s\n", micro->cmd);
 		if (execve(micro->cmd, micro->arg, env) == -1)
 			write(2, "error: cannot execute executable_that_failed\n", strlen("error: cannot execute executable_that_failed\n"));
 	}
-	else
-		waitpid(pid, NULL, WNOHANG);
+	waitpid(pid, NULL, WUNTRACED);
 }
 
 int count_arg(char **arg)
@@ -121,9 +136,10 @@ int count_arg(char **arg)
 
 t_microshell	*pipe_func(t_microshell *micro, char **env)
 {
-	int in = 1;
+	int in = 0;
 	int old_stdout = dup(STDIN_FILENO);
 	pid_t pid;
+
 
 	while (micro->meta && strcmp(micro->meta, "|") == 0)
 	{
@@ -142,7 +158,7 @@ t_microshell	*pipe_func(t_microshell *micro, char **env)
 				dup2(fd[1], 1);
 				close(fd[1]);
 			}
-			if (strcmp(micro->cmd, "cd") == 0)
+			if (micro->cmd && strcmp(micro->cmd, "cd") == 0)
 			{
 				if (count_arg(micro->arg) > 2)
 					write(2, "error: cd: bad arguments\n", strlen("error: cd: bad arguments\n"));
@@ -151,8 +167,10 @@ t_microshell	*pipe_func(t_microshell *micro, char **env)
 					write(2, "error: cd: cannot change directory to path_to_change\n", strlen("error: cd: cannot change directory to path_to_change\n"));
 				}
 			}
-			else
+			else	
+			{
 				execute(micro, env);
+			}
 			exit(EXIT_SUCCESS);
 		}
 		else
@@ -165,7 +183,7 @@ t_microshell	*pipe_func(t_microshell *micro, char **env)
 	}
 	dup2(in, 0);
 	close(in);
-	if (strcmp(micro->cmd, "cd") == 0)
+	if (micro->cmd && strcmp(micro->cmd, "cd") == 0)
 	{
 		if (count_arg(micro->arg) > 2)
 			write(2, "error: cd: bad arguments\n", strlen("error: cd: bad arguments\n"));
@@ -175,7 +193,9 @@ t_microshell	*pipe_func(t_microshell *micro, char **env)
 		}
 	}
 	else
+	{
 		execute(micro, env);
+	}
 	close(fd[1]);
 	close(fd[0]);
 	close(in);
@@ -183,14 +203,14 @@ t_microshell	*pipe_func(t_microshell *micro, char **env)
 	return (micro);	
 }
 
-void	built_in(int ac, char **av, char **env, t_microshell *micro)
+void	built_in(char **av, char **env, t_microshell *micro)
 {
-	filling_struct(ac, av, micro);
+	filling_struct(av, micro);
 	while (micro != NULL)
 	{
-		if (micro->meta && strcmp(micro->meta, ";") == 0)
+		if (micro->cmd && micro->meta && strcmp(micro->meta, ";") == 0)
 		{
-			if (strcmp(micro->cmd, "cd") == 0)
+			if (micro->cmd && strcmp(micro->cmd, "cd") == 0)
 			{
 				if (count_arg(micro->arg) > 2)
 					write(2, "error: cd: bad arguments\n", strlen("error: cd: bad arguments\n"));
@@ -200,16 +220,17 @@ void	built_in(int ac, char **av, char **env, t_microshell *micro)
 				}
 			}
 			else
+			{
 				execute(micro, env);
+			}
 		}
-		else if (micro->meta && strcmp(micro->meta, "|") == 0)
+		else if (micro->cmd && micro->meta && strcmp(micro->meta, "|") == 0)
 		{
-		//	printf("Enter\n");
 			micro = pipe_func(micro, env);
 		}
-		else
+		else 
 		{
-			if (strcmp(micro->cmd, "cd") == 0)
+			if (micro->cmd && strcmp(micro->cmd, "cd") == 0)
 			{
 				if (count_arg(micro->arg) > 2)
 					write(2, "error: cd: bad arguments\n", strlen("error: cd: bad arguments\n"));
@@ -228,14 +249,10 @@ void	built_in(int ac, char **av, char **env, t_microshell *micro)
 int	main(int ac, char **av, char **env)
 {
 	t_microshell micro;
-	int i = 1;
 
-	micro = init_str(micro);
-	built_in(ac, av, env, &micro);
-	// char *argv[] = {"/bin/ls", NULL};
-	// if (execve("/bin/ls", argv, env) == -1)
-	// {
-	// 	write(2, "error: cannot execute executable_that_failed\n", strlen("error: cannot execute executable_that_failed\n"));
-	// }
+	if (ac < 2)
+		return 0;
+	micro = init_str();
+	built_in(av, env, &micro);
 	return (0);
 }
